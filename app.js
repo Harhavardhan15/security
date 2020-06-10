@@ -133,7 +133,14 @@ app.get("/register", function (req, res) {
 });
 app.get("/secrets", function (req, res) {
     if (req.isAuthenticated()) {
-        res.render("secrets");
+        User.find({"secret":{$ne: null}},function(err,foundUser){
+            if(err){
+                console.log(err);
+            } else{
+                res.render("secrets",{usersWithSecrets:foundUser});
+            }
+        })
+       
         
     } else {
         res.redirect("/login");
@@ -148,19 +155,19 @@ app.get("/submit", function (req, res) {
         res.redirect("/login");
     }
 });
-// app.post("/submit", function (req, res) {
-//    const submittedSecret = req.body.secret;
-//    console.log(req.user);
-//    User.findById(req.user.id,function(err, foundUser){
-//        if(err){
-//            console.log(err);
-//        } else{
-//            foundUser.secret = submittedSecret;
-//            foundUser.save();
-//            res.redirect("/secrets");
-//        }
-//    })
-// });
+app.post("/submit", function (req, res) {
+   const submittedSecret = req.body.secret;
+   console.log(req.user);
+   User.findById(req.user.id,function(err, foundUser){
+       if(err){
+           console.log(err);
+       } else{
+           foundUser.secret = submittedSecret;
+           foundUser.save();
+           res.redirect("/secrets");
+       }
+   })
+});
 ///////////////////////////////PASSPORT LOGOUT///////////////////////////////
 app.get("/logout", function (req, res) {
     req.logout();
