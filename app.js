@@ -8,6 +8,7 @@ const session = require("express-session");
 const passport = require("passport");
 const passportLocalMongoose = require("passport-local-mongoose");
 const GoogleStrategy = require("passport-google-oauth20").Strategy;
+const FacebookStrategy = require("passport-facebook").Strategy;
 const findOrCreate = require("mongoose-findorcreate");
 
 
@@ -41,15 +42,20 @@ mongoose.set('useCreateIndex', true)
 const userSchema = new mongoose.Schema({
     email: String,
     googleId:String,
-    password: String
-});
+    password: String,
+    facebookId:String,
+    userName:String,
+    imgURL:String,
+    secret:String
 
+});
+////////////////////////////////AUTHENTICATION PLUGINS //////////////////////////////////////////
 userSchema.plugin(passportLocalMongoose);
 userSchema.plugin(findOrCreate);
 
 
 const User = new mongoose.model("User", userSchema);
-
+/////////////////////////////CREATE STRATEGY TO USE STRATEGE FROM PASSPORT //////////////////////////
 passport.use(User.createStrategy());
 
 passport.serializeUser(function(user, done) {
@@ -71,19 +77,31 @@ passport.use(new GoogleStrategy({
     userProfileURL:"https://www.googleapis.com/oauth2/v3/userinfo"
   },
   function(accessToken, refreshToken, profile, cb) {
-      console.log(profile);
-    User.findOrCreate({ googleId: profile.id }, function (err, user) {
+    User.findOrCreate({ googleId: profile.id, userName:profile.displayName,imgURL:profile._json.picture }, function (err, user) {
       return cb(err, user);
     });
   }
 ));
 
+//////////////////////FACEBOOK AUTH//////////////////////////////
+
+passport.use(new FacebookStrategy({
+    clientID: process.env.FACEBOOK_APP_ID,
+    clientSecret: process.env.FACEBOOK_APP_SECRET,
+    callbackURL: "http://localhost:3000/auth/facebook/callback"
+  },
+  function(accessToken, refreshToken, profile, cb) {
+    User.findOrCreate({ facebookId: profile.id ,userName:profile.displayName}, function (err, user) {
+      return cb(err, user);
+     });
+  }
+));
 ////////////////////////////////ROUTES////////////////////////////
 app.get("/", function (req, res) {
     res.render("home");
 
 });
-
+//////////////////////////GOOGLE REDIRECTS////////////////////
 app.get('/auth/google',
   passport.authenticate('google', { scope: ['profile'] }));
 
@@ -94,6 +112,19 @@ app.get('/auth/google/secret',
     res.redirect('/secrets');
   });
 
+//////////////////////////FACEBOOK REDIRECTS////////////////////
+  app.get('/auth/facebook',
+  passport.authenticate('facebook', { scope: ['profile'] }));
+
+app.get('/auth/facebook/callback',
+  passport.authenticate('facebook', { failureRedirect: '/login' }),
+  function(req, res) {
+    // Successful authentication, redirect home.
+    res.redirect('/secrets');
+    
+  });
+
+///////////////////////////////REGULAR ROUTES///////////////////////////////
 app.get("/login", function (req, res) {
     res.render("login");
 });
@@ -103,10 +134,34 @@ app.get("/register", function (req, res) {
 app.get("/secrets", function (req, res) {
     if (req.isAuthenticated()) {
         res.render("secrets");
+        
     } else {
         res.redirect("/login");
     }
 });
+
+app.get("/submit", function (req, res) {
+    if (req.isAuthenticated()) {
+        res.render("submit");
+        
+    } else {
+        res.redirect("/login");
+    }
+});
+// app.post("/submit", function (req, res) {
+//    const submittedSecret = req.body.secret;
+//    console.log(req.user);
+//    User.findById(req.user.id,function(err, foundUser){
+//        if(err){
+//            console.log(err);
+//        } else{
+//            foundUser.secret = submittedSecret;
+//            foundUser.save();
+//            res.redirect("/secrets");
+//        }
+//    })
+// });
+///////////////////////////////PASSPORT LOGOUT///////////////////////////////
 app.get("/logout", function (req, res) {
     req.logout();
     res.redirect('/');
@@ -127,7 +182,7 @@ app.post("/register", function (req, res) {
     })
 
 });
-
+///////////////////////////////////LOGIN //////////////////////////////////////////////
 app.post("/login", function (req, res) {
     const user = new User({
         username: req.body.username,
